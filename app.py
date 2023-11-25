@@ -1,6 +1,7 @@
 from flask import Flask, render_template, request, redirect, url_for
 import whoosh.index as index
 from whoosh.qparser import QueryParser
+import traceback
 
 app = Flask(__name__)
 
@@ -9,6 +10,10 @@ INDEX_DIR = 'woosh_index'
 
 # Create a Whoosh index object
 index_object = index.open_dir(INDEX_DIR)
+
+@app.errorhandler(500)
+def internal_error(exception):
+   return "<pre>"+traceback.format_exc()+"</pre>"
 
 @app.route('/', methods=['GET', 'POST'])
 def home():
