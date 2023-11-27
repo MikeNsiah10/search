@@ -6,6 +6,8 @@ import whoosh.index
 from whoosh.qparser import QueryParser
 from whoosh.fields import Schema, TEXT, ID, STORED
 
+from whoosh.highlight import Highlighter, WholeFragmenter, UppercaseFormatter
+
 # Define the schema for the Woosh index
 schema = Schema(
     url=ID(stored=True),
@@ -50,12 +52,11 @@ class Crawler:
             if current_url in self.visited_link:
                 continue
 
-            page_content = self.get_url_content(current_url)
+            content = self.get_url_content(current_url)
 
-            if page_content is not None:
+            if content is not None:
                 #extract information from the url content
-                soup = BeautifulSoup(page_content, 'html.parser')
-                page_text = soup.get_text()
+                soup = BeautifulSoup(content, 'html.parser')
                 page_title = soup.title.string if soup.title else ""
                 page_text = soup.get_text()
                 teaser_text = page_text[:200]  # Extract the first 200 characters as teaser text
@@ -75,27 +76,50 @@ class Crawler:
         self.writer.commit()
 
 #function to search the whoosh index
-def search(query_string):
+    
+def search(query):
     with index.searcher() as searcher:
         # Parse the search query and perform a search
-        query_parser = whoosh.qparser.QueryParser("content", schema=index.schema)
-        query = query_parser.parse(query_string)
-        results = searcher.search(query)
-        # Extract and return the URLs of the search results
-        result_links = [result["url"] for result in results]
-        return result_links
+        query_parser = QueryParser("content", schema=index.schema)
+        query = query_parser.parse(query)
+        
+        # Use the WholeFragmenter to get the entire field value as a fragment
+        frag = WholeFragmenter()
 
+        # Use the UppercaseFormatter for case-insensitive highlighting
+        format = UppercaseFormatter()
+
+        # Set up a highlighter with the chosen fragmenter and formatter
+        highlighter = Highlighter(fragmenter=frag,formatter=format)
+
+        # Search and apply highlighting to the content field
+        results = searcher.search(query)
+        results.fragmenter = frag
+        results.formatter = format
+
+        # Extract and return the URLs of the search results with highlighted snippets
+        result_data = []
+        for result in results:
+            # Get highlighted snippets for the "content" field
+            content_highlights = highlighter.highlight_hit(result, "content")
+            
+            # Append the URL and highlighted content to the result_data list
+            result_data.append({
+                "url": result["url"],
+                "highlighted_content": content_highlights
+            })
+
+        return result_data
 #testing crawler.py
-if __name__ == "__main__":
     #define a start url
-    start_url = "https://vm009.rz.uos.de/crawl/index.html"
+start_url = "https://vm009.rz.uos.de/crawl/index.html"
     #initialise and run crawler
-    crawler = Crawler()
-    crawler.crawl(start_url)
+crawler = Crawler()
+crawler.crawl(start_url)
     #save changes to whoosh index
-    crawler.commit_index()
+crawler.commit_index()
     
     # Define a search query and perform a search
-    search_query = "meat"
-    result_links = search(search_query)
-    print(result_links)
+search_query = input("Enter something to searh :")
+result_links = search(search_query)
+print(result_links)
